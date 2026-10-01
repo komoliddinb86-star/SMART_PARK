@@ -1,0 +1,17 @@
+Django==5.0.9
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.3.1
+drf-spectacular==0.27.2
+django-cors-headers==4.4.0
+django-celery-beat==2.7.0
+channels==4.1.0
+channels-redis==4.2.1
+daphne==4.1.2
+celery==5.4.0
+redis==5.0.8
+psycopg2-binary==2.9.9
+paho-mqtt==1.6.1        # used by apps/iot_integration/management/commands/mqtt_subscriber.py
+PyJWT==2.9.0
+Pillow==10.4.0
+python-dotenv==1.0.1
+gunicorn==23.0.0

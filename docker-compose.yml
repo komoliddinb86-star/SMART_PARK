@@ -1,0 +1,111 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smartpark}
+      POSTGRES_USER: ${POSTGRES_USER:-smartpark}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-smartpark}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-smartpark}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+
+  backend:
+    build: .
+    command: daphne -b 0.0.0.0 -p 8000 smartpark_backend.asgi:application
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MQTT_BROKER_HOST: mosquitto
+    volumes:
+      - .:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery_worker:
+    build: .
+    command: celery -A smartpark_backend worker -l info
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MQTT_BROKER_HOST: mosquitto
+    volumes:
+      - .:/app
+    depends_on:
+      - backend
+
+  celery_beat:
+    build: .
+    command: celery -A smartpark_backend beat -l info
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MQTT_BROKER_HOST: mosquitto
+    volumes:
+      - .:/app
+    depends_on:
+      - backend
+
+  mqtt_subscriber:
+    build: .
+    command: python manage.py mqtt_subscriber
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MQTT_BROKER_HOST: mosquitto
+    volumes:
+      - .:/app
+    depends_on:
+      - backend
+      - mosquitto
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_volume:/app/staticfiles:ro
+      - media_volume:/app/media:ro
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  mosquitto_data:
+  mosquitto_log:
+  static_volume:
+  media_volume:
